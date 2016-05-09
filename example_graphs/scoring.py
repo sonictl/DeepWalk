@@ -2,7 +2,7 @@
 
 """scoring.py: Script that demonstrates the multi-label classification used."""
 
-__author__      = "Bryan Perozzi"
+__author__ = "Bryan Perozzi"
 
 
 import numpy
@@ -17,19 +17,26 @@ from collections import defaultdict
 from gensim.models import Word2Vec
 
 class TopKRanker(OneVsRestClassifier):
+    
+    # override only the `predict` function
     def predict(self, X, top_k_list):
         assert X.shape[0] == len(top_k_list)
         probs = numpy.asarray(super(TopKRanker, self).predict_proba(X))
         all_labels = []
         for i, k in enumerate(top_k_list):
             probs_ = probs[i, :]
+            # find the classes with the largest probs
             labels = self.classes_[probs_.argsort()[-k:]].tolist()
             all_labels.append(labels)
         return all_labels
 
 def sparse2graph(x):
+    # note by using the lambda function, each (key, value) pair is actually now a (key, set) pair
+    # where the set is indexed by key
     G = defaultdict(lambda: set())
+    # from a sparse matrix to its sparse COOrdinate representation 
     cx = x.tocoo()
+    # izip returns a generator that zips (a, b, c) as a tuple
     for i,j,v in izip(cx.row, cx.col, cx.data):
         G[i].add(j)
     return {str(k): [str(x) for x in v] for k,v in G.iteritems()}
@@ -48,38 +55,42 @@ A = mat['network']
 graph = sparse2graph(A)
 labels_matrix = mat['group']
 
-# Map nodes to their features (note:  assumes nodes are labeled as integers 1:N)
+# Map nodes to their features (note: assumes nodes are labeled as integers 0:N - 1)
 features_matrix = numpy.asarray([model[str(node)] for node in range(len(graph))])
 
 # 2. Shuffle, to create train/test groups
 shuffles = []
 number_shuffles = 2
 for x in range(number_shuffles):
-  shuffles.append(skshuffle(features_matrix, labels_matrix))
+    shuffles.append(skshuffle(features_matrix, labels_matrix))
 
 # 3. to score each train/test group
 all_results = defaultdict(list)
 
 training_percents = [0.1, 0.5, 0.9]
 # uncomment for all training percents
-#training_percents = numpy.asarray(range(1,10))*.1
+# training_percents = numpy.asarray(range(1,10))*.1
 for train_percent in training_percents:
-  for shuf in shuffles:
+    for shuf in shuffles:
+        
+        # X contains the feature vectors of nodes while y the labels
+        X, y = shuf
 
-    X, y = shuf
+        training_size = int(train_percent * X.shape[0])
 
-    training_size = int(train_percent * X.shape[0])
+        X_train = X[:training_size, :]
+        y_train_ = y[:training_size]
 
-    X_train = X[:training_size, :]
-    y_train_ = y[:training_size]
+        # y_train is a list container
+        y_train = [[] for x in xrange(y_train_.shape[0])]
 
-    y_train = [[] for x in xrange(y_train_.shape[0])]
-
-
-    cy =  y_train_.tocoo()
+        cy =  y_train_.tocoo()
+        
     for i, j in izip(cy.row, cy.col):
         y_train[i].append(j)
 
+    # nnz: number of nonzero elements
+    # note that y_train is actually sparse, containing only those nonzero
     assert sum(len(l) for l in y_train) == y_train_.nnz
 
     X_test = X[training_size:, :]
@@ -95,20 +106,21 @@ for train_percent in training_percents:
     clf.fit(X_train, y_train)
 
     # find out how many labels should be predicted
+    # they are already known
     top_k_list = [len(l) for l in y_test]
     preds = clf.predict(X_test, top_k_list)
 
     results = {}
     averages = ["micro", "macro", "samples", "weighted"]
     for average in averages:
-        results[average] = f1_score(y_test,  preds, average=average)
+        results[average] = f1_score(y_test,  preds, average = average)
 
     all_results[train_percent].append(results)
 
 print 'Results, using embeddings of dimensionality', X.shape[1]
 print '-------------------'
 for train_percent in sorted(all_results.keys()):
-  print 'Train percent:', train_percent
-  for x in all_results[train_percent]:
-    print  x
-  print '-------------------'
+    print 'Train percent:', train_percent
+    for x in all_results[train_percent]:
+        print x
+    print '-------------------'
