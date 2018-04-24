@@ -97,3 +97,5 @@ DeepWalk - Online learning of social representations.
 
 .. image:: https://pypip.in/d/deepwalk/badge.png
         :target: https://pypi.python.org/pypi/deepwalk
+        
+ref: http://wellyzhang.github.io/2016/05/09/demystify-deep-walk/
